@@ -2,7 +2,7 @@
 # This script runs a local web server to handle AI classification and chat.
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS # CORS is already imported, which is great!
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -113,15 +113,19 @@ print("AI Model and chains are ready.")
 
 # --- FLASK APP ---
 app = Flask(__name__)
-# CORS allows the extension (from a different "origin") to communicate with this server.
-CORS(app)
+
+# --- THE FIX ---
+# Instead of just CORS(app), we make it more explicit to ensure it works on Render.
+# This tells the server to add the required "permission slip" header to all responses,
+# allowing requests from any origin (*).
+CORS(app, resources={r"/*": {"origins": "*"}})
+
 
 @app.route('/classify', methods=['POST'])
 def classify_email():
     """Endpoint for the initial spam classification."""
     data = request.json
     email_text = data.get('email')
-    print(email_text)
     if not email_text:
         return jsonify({"error": "No email text provided"}), 400
 
