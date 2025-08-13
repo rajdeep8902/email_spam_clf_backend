@@ -8,14 +8,10 @@ services:
     name: email-analyzer-backend
     # Make sure this is set to 'python'
     runtime: python
-    # This is the crucial line that forces the correct Python version
-    pythonVersion: "3.11.9"
+    # This is the corrected key: python_version with an underscore
+    python_version: "3.11.9"
     plan: free # Specifies the free instance type
     # The command to install all your libraries
     buildCommand: "pip install -r requirements.txt"
     # The command to start your web server
     startCommand: "gunicorn server:app"
-    # Optional: You can also define environment variables here
-    # envVars:
-    #   - key: GOOGLE_API_KEY
-    #     fromSecret: true # Assumes you create a secret group for this
