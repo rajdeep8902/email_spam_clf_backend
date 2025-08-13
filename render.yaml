@@ -1,17 +1,20 @@
 # render.yaml
 # This file tells Render exactly how to build and deploy the service.
-# It ensures the correct Python version is used.
+# It uses an environment variable to force the correct Python version.
 
 services:
-  # This name can be anything, but it's good practice to match your service name on Render
   - type: web
     name: email-analyzer-backend
-    # Make sure this is set to 'python'
+    # The runtime environment for the service
     runtime: python
-    # This is the corrected key: python_version with an underscore
-    python_version: "3.11.9"
-    plan: free # Specifies the free instance type
+    # The plan for the service (free tier)
+    plan: free
     # The command to install all your libraries
     buildCommand: "pip install -r requirements.txt"
     # The command to start your web server
     startCommand: "gunicorn server:app"
+    # Environment variables for the service
+    envVars:
+      # This is the new, more robust way to set the Python version
+      - key: PYTHON_VERSION
+        value: 3.11.9
