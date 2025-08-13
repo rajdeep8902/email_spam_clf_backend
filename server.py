@@ -1,10 +1,10 @@
 # server.py
-# This version loads the pre-built FAISS index to save memory.
+# This version loads the pre-built ChromaDB index to save memory and ensure compatibility.
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_community.vectorstores import Chroma # Changed from FAISS
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
@@ -20,16 +20,18 @@ load_dotenv()
 if not os.getenv("GOOGLE_API_KEY"):
     raise ValueError("GOOGLE_API_KEY not found in environment variables.")
 
-# --- Load the pre-built FAISS index from the local folder ---
-print("Loading pre-built FAISS index...")
+# --- Load the pre-built ChromaDB index from the local folder ---
+CHROMA_PATH = "chroma_db"
+print(f"Loading pre-built ChromaDB index from: {CHROMA_PATH}")
+
 try:
     embedding_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
-    # The key change: FAISS.load_local instead of FAISS.from_documents
-    vector_store = FAISS.load_local("faiss_index", embedding_model, allow_dangerous_deserialization=True)
+    # The key change: Load the persisted Chroma database
+    vector_store = Chroma(persist_directory=CHROMA_PATH, embedding_function=embedding_model)
     retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
     print("Vector store loaded successfully.")
 except Exception as e:
-    raise RuntimeError(f"Could not load the FAISS index. Make sure the 'faiss_index' folder exists and is in the same directory. Error: {e}")
+    raise RuntimeError(f"Could not load the ChromaDB index. Make sure the '{CHROMA_PATH}' folder exists. Error: {e}")
 
 
 # d. Model and Chains Setup
