@@ -1,18 +1,15 @@
 # server.py
-# This script runs a local web server to handle AI classification and chat.
+# This version loads the pre-built FAISS index to save memory.
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS # CORS is already imported, which is great!
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from flask_cors import CORS
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.schema import Document
 from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.messages import HumanMessage, AIMessage
 from dotenv import load_dotenv
-import pandas as pd
 import os
 
 # --- INITIAL SETUP (Runs once when the server starts) ---
@@ -21,32 +18,19 @@ load_dotenv()
 
 # Check for Google API Key
 if not os.getenv("GOOGLE_API_KEY"):
-    raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it up in a .env file.")
+    raise ValueError("GOOGLE_API_KEY not found in environment variables.")
 
-# a. Document Ingestion
+# --- Load the pre-built FAISS index from the local folder ---
+print("Loading pre-built FAISS index...")
 try:
-    df = pd.read_csv("email_spam.csv")
-    df['content'] = df['title'] + "\n" + df['text']
-    documents = df['content'].tolist()
-    labels = df['type'].tolist()
-except FileNotFoundError:
-    raise FileNotFoundError("Error: email_spam.csv not found. Make sure it's in the same directory as server.py.")
+    embedding_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    # The key change: FAISS.load_local instead of FAISS.from_documents
+    vector_store = FAISS.load_local("faiss_index", embedding_model, allow_dangerous_deserialization=True)
+    retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
+    print("Vector store loaded successfully.")
+except Exception as e:
+    raise RuntimeError(f"Could not load the FAISS index. Make sure the 'faiss_index' folder exists and is in the same directory. Error: {e}")
 
-# b. Splitter
-splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
-docs = []
-for doc, label in zip(documents, labels):
-    chunks = splitter.split_text(doc)
-    for chunk in chunks:
-        doc_obj = Document(page_content=chunk, metadata={"label": label})
-        docs.append(doc_obj)
-
-# c. Embedding Generation and Storing
-print("Generating embeddings and creating vector store...")
-embedding_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
-vector_store = FAISS.from_documents(docs, embedding_model)
-retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 3})
-print("Vector store is ready.")
 
 # d. Model and Chains Setup
 model = ChatGoogleGenerativeAI(model='gemini-1.5-flash')
@@ -90,7 +74,6 @@ chat_prompt = PromptTemplate.from_template(
 )
 
 def format_chat_history(history):
-    """Formats the chat history list of objects into a readable string."""
     if not history:
         return "No history yet."
     return "\n".join([f"{msg['role']}: {msg['content']}" for msg in history])
@@ -113,45 +96,30 @@ print("AI Model and chains are ready.")
 
 # --- FLASK APP ---
 app = Flask(__name__)
-
-# --- THE FIX ---
-# Instead of just CORS(app), we make it more explicit to ensure it works on Render.
-# This tells the server to add the required "permission slip" header to all responses,
-# allowing requests from any origin (*).
 CORS(app, resources={r"/*": {"origins": "*"}})
-
 
 @app.route('/classify', methods=['POST'])
 def classify_email():
-    """Endpoint for the initial spam classification."""
     data = request.json
     email_text = data.get('email')
     if not email_text:
         return jsonify({"error": "No email text provided"}), 400
-
-    print("Classifying email...")
     result = clf_chain.invoke(email_text)
-    print(f"Classification result: {result}")
     return jsonify({"classification": result.strip()})
 
 @app.route('/chat', methods=['POST'])
 def chat_with_email():
-    """Endpoint for follow-up questions about the email."""
     data = request.json
     question = data.get('question')
     email_content = data.get('email_content')
-    chat_history = data.get('chat_history', []) # Expects a list of message objects
-
+    chat_history = data.get('chat_history', [])
     if not all([question, email_content]):
         return jsonify({"error": "Missing 'question' or 'email_content'"}), 400
-
-    print(f"Handling chat query: {question}")
     result = chat_chain.invoke({
         "question": question,
         "email_content": email_content,
         "chat_history": chat_history
     })
-    print(f"Chat response: {result}")
     return jsonify({"response": result.strip()})
 
 if __name__ == '__main__':
